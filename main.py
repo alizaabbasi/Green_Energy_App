@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import joblib
 import numpy as np
+import sqlite3
 
 app = FastAPI(title="Smart Grid Energy Router API")
 
@@ -14,6 +15,21 @@ class SmartMeterReading(BaseModel):
     battery_level: float
     grid_price: float
     house_demand: float
+# Create a local SQL database and a table for logs if it doesn't exist
+conn = sqlite3.connect("smart_grid.db")
+cursor = conn.cursor()
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS energy_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        solar REAL,
+        battery REAL,
+        price REAL,
+        demand REAL,
+        status TEXT
+    )
+""")
+conn.commit()
+conn.close()
 
 @app.get("/")
 def home():
@@ -36,6 +52,15 @@ def route_power(reading: SmartMeterReading):
     else:
         action = "STANDARD_BALANCED_MODE"
         directive = "Normal operating conditions. Blending solar generation with minimal grid baseline power."
+# Run a SQL Query to insert the live data into our database
+db_conn = sqlite3.connect("smart_grid.db")
+db_cursor = db_conn.cursor()
+db_cursor.execute(
+    "INSERT INTO energy_logs (solar, battery, price, demand, status) VALUES (?, ?, ?, ?, ?)",
+    (reading.solar_output, reading.battery_level, reading.grid_price, reading.house_demand, action)
+)
+db_conn.commit()
+db_conn.close()
 
     return {
         "automation_status": action,
